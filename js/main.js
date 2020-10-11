@@ -10,7 +10,9 @@ import {
     DirectionalLight,
     MeshPhongMaterial,
     Vector3,
-    AxesHelper
+    AxesHelper,
+    PlaneBufferGeometry,
+    MeshBasicMaterial
 } from './lib/three.module.js';
 
 import Utilities from './lib/Utilities.js';
@@ -25,7 +27,7 @@ async function main() {
 
     const scene = new Scene();
 
-    const axesHelper = new AxesHelper(5);
+    const axesHelper = new AxesHelper(15);
     scene.add(axesHelper);
 
     const camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -55,6 +57,9 @@ async function main() {
      */
     document.body.appendChild(renderer.domElement);
 
+    /**
+     * Add light
+     */
     const directionalLight = new DirectionalLight(0xffffff);
     directionalLight.position.set(300, 400, 0);
 
@@ -68,19 +73,13 @@ async function main() {
 
     scene.add(directionalLight);
 
-    const geometry = new BoxBufferGeometry(1, 1, 1);
-    const material = new MeshPhongMaterial({ color: 0x00ff00 });
-    const cube = new Mesh(geometry, material);
+    // Set direction
+    directionalLight.target.position.set(0, 15, 0);
+    scene.add(directionalLight.target);
 
-    cube.castShadow = true;
-    cube.position.set(0, 15, 0);
-
-    directionalLight.target = cube;
-
-    scene.add(cube);
-
-    camera.position.z = 10;
-    camera.position.y = 25;
+    camera.position.z = 70;
+    camera.position.y = 55;
+    camera.rotation.x -= Math.PI * 0.25;
 
 
     /**
@@ -92,7 +91,6 @@ async function main() {
      *  - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function
      */
     const heightmapImage = await Utilities.loadImage('resources/images/heightmap.png');
-
     const width = 100;
 
     const simplex = new SimplexNoise();
@@ -103,6 +101,37 @@ async function main() {
         numberOfSubdivisions: 128,
         height: 20
     });
+
+    const grassTexture = new TextureLoader().load('resources/textures/grass_02.png');
+    grassTexture.wrapS = RepeatWrapping;
+    grassTexture.wrapT = RepeatWrapping;
+    grassTexture.repeat.set(5000 / width, 5000 / width);
+
+    const snowyRockTexture = new TextureLoader().load('resources/textures/snowy_rock_01.png');
+    snowyRockTexture.wrapS = RepeatWrapping;
+    snowyRockTexture.wrapT = RepeatWrapping;
+    snowyRockTexture.repeat.set(1500 / width, 1500 / width);
+
+
+    const splatMap = new TextureLoader().load('resources/images/splatmap_01.png');
+
+    const terrainMaterial = new TextureSplattingMaterial({
+        color: 0xffffff,
+        shininess: 0,
+        textures: [snowyRockTexture, grassTexture],
+        splatMaps: [splatMap]
+    });
+
+    const terrain = new Mesh(terrainGeometry, terrainMaterial);
+
+    terrain.castShadow = true;
+    terrain.receiveShadow = true;
+
+    scene.add(terrain);
+
+    /**
+     * Add trees
+     */
 
     // instantiate a GLTFLoader:
     const loader = new GLTFLoader();
@@ -151,34 +180,6 @@ async function main() {
             console.error('Error loading model.', error);
         }
     );
-
-    const grassTexture = new TextureLoader().load('resources/textures/grass_02.png');
-    grassTexture.wrapS = RepeatWrapping;
-    grassTexture.wrapT = RepeatWrapping;
-    grassTexture.repeat.set(5000 / width, 5000 / width);
-
-    const snowyRockTexture = new TextureLoader().load('resources/textures/snowy_rock_01.png');
-    snowyRockTexture.wrapS = RepeatWrapping;
-    snowyRockTexture.wrapT = RepeatWrapping;
-    snowyRockTexture.repeat.set(1500 / width, 1500 / width);
-
-
-    const splatMap = new TextureLoader().load('resources/images/splatmap_01.png');
-
-    const terrainMaterial = new TextureSplattingMaterial({
-        color: 0x777777,
-        shininess: 0,
-        textures: [snowyRockTexture, grassTexture],
-        splatMaps: [splatMap]
-    });
-
-    const terrain = new Mesh(terrainGeometry, terrainMaterial);
-
-    terrain.castShadow = true;
-    terrain.receiveShadow = true;
-
-    scene.add(terrain);
-
 
     /**
      * Set up camera controller:
@@ -285,14 +286,8 @@ async function main() {
         pitch = 0;
 
         // apply rotation to velocity vector, and translate moveNode with it.
-
         velocity.applyQuaternion(camera.quaternion);
         camera.position.add(velocity);
-
-
-        // animate cube rotation:
-        cube.rotation.x += 0.01;
-        cube.rotation.y += 0.01;
 
         // render scene:
         renderer.render(scene, camera);
