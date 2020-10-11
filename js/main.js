@@ -3,16 +3,12 @@ import {
     WebGLRenderer,
     PCFSoftShadowMap,
     Scene,
-    BoxBufferGeometry,
     Mesh,
     TextureLoader,
     RepeatWrapping,
     DirectionalLight,
-    MeshPhongMaterial,
     Vector3,
     AxesHelper,
-    PlaneBufferGeometry,
-    MeshBasicMaterial
 } from './lib/three.module.js';
 
 import Utilities from './lib/Utilities.js';
