@@ -1,6 +1,5 @@
 /**
  * Terrain geometry based on PlaneBufferGeometry.
- * oskarbraten
  */
 
 import Utilities from '../lib/Utilities.js';
@@ -8,64 +7,95 @@ import { PlaneBufferGeometry } from '../lib/three.module.js';
 
 export default class TerrainBufferGeometry extends PlaneBufferGeometry {
 
-    constructor({ heightmapImage, width = 100, numberOfSubdivisions = 128, height = 20 }) {
+    constructor({ heightmapImage, noiseFn = null, width = 100, numberOfSubdivisions = 128, height = 20 }) {
 
-    	super(width, width, numberOfSubdivisions, numberOfSubdivisions);
+        super(width, width, numberOfSubdivisions, numberOfSubdivisions);
 
         this.rotateX(-Math.PI / 2);
+        this.apply
 
         this.numberOfSubdivisions = numberOfSubdivisions;
 
         this.width = width;
         this.height = height;
 
-    	// get heightmap data
-    	this.heightmap = Utilities.getHeightmapData(heightmapImage, this.numberOfSubdivisions + 1);
+        if (heightmapImage) {
 
-    	// assign Y-values
-    	let v = 0;
-    	for (let i = 0; i < this.heightmap.length; i++) {
-    		this.attributes.position.array[v + 1] = this.heightmap[i] * this.height;
-    		v += 3;
-    	}
+            // get heightmap data
+            this.heightmap = Utilities.getHeightmapData(heightmapImage, numberOfSubdivisions + 1);
 
-    	// move such that the center is in the corner and not in origo.
-    	//this.translate(this.width / 2, 0, this.width / 2);
+            // assign Y-values
+            for (let i = 0; i < this.heightmap.length; i++) {
+                this.attributes.position.setY(i, this.heightmap[i] * this.height);
+            }
 
-    	// recompute normals.
-    	this.computeVertexNormals();
+        } else if (noiseFn !== null) {
+
+            const smoothing = 30;
+            let noise = [];
+            for (var i = 0; i < this.attributes.position.count; i++) {
+                noise.push(noiseFn(
+                    this.attributes.position.getX(i) / smoothing,
+                    this.attributes.position.getZ(i) / smoothing
+                ));
+            }
+
+            let min = Math.min(...noise);
+            let max = Math.max(...noise);
+
+            for (var i = 0; i <= this.attributes.position.count; i++) {
+                this.attributes.position.setY(i, height * ((noise[i] - min) / (max - min)));
+            }
+
+        } else {
+            throw Error('Unable to create TerrainBufferGeometry, must receive heightmapImage or noise function.');
+        }
+
+        // recompute normals.
+        this.computeVertexNormals();
     }
 
     /**
-     * [getHeightAt description]
-     * @param  {[type]} position [description]
-     * @return {[type]}          [description]
+     * Get the Y-value at the exact integral (x, z) coordinates.
+     * @param {Integer} x
+     * @param {Integer} z
      */
-    getHeightAt(position) {
+    getY(x, z) {
+        return this.attributes.position.getY((Math.trunc(z) * (this.numberOfSubdivisions + 1)) + Math.trunc(x));
+    }
 
-        position.x += (this.width / 2);
-        position.z += (this.width / 2);
+    /**
+     * Get the height of the terrain at the given (x, z) coordinates. Useful for placing objects on the terrain.
+     * @param {Number} x
+     * @param {Number} z
+     */
+    getHeightAt(x, z) {
 
-        if (0 > position.x || position.x > this.width || 0 > position.z || position.z > this.width) {
+        // Account for origo being at the center of the terrain geometry:
+        const px = x + (this.width / 2);
+        const pz = z + (this.width / 2);
+
+        // If the position is outside the bounds of the terrain return zero.
+        if (0 >= px || px >= this.width || 0 >= pz || pz >= this.width) {
             return 0;
         }
 
-        let v = this.numberOfSubdivisions;
+        let factor = this.numberOfSubdivisions / this.width;
 
-        let factor = v / this.width;
+        const fX = (px * factor) % 1;
+        const fZ = (pz * factor) % 1;
 
-        let x_max = Math.ceil(position.x * factor);
-        let x_min = Math.floor(position.x * factor);
+        let x_min = Math.floor(px * factor);
+        let x_max = Math.ceil(px * factor);
+        let z_min = Math.floor(pz * factor);
+        let z_max = Math.ceil(pz * factor);
 
-        let z_max = Math.ceil(position.z * factor);
-        let z_min = Math.floor(position.z * factor);
+        let h1 = this.getY(x_min, z_min);
+        let h2 = this.getY(x_max, z_min);
+        let h3 = this.getY(x_min, z_max);
+        let h4 = this.getY(x_max, z_max);
 
-        let h0 = this.heightmap[(z_max * (v + 1)) + x_max] * this.height;
-        let h1 = this.heightmap[(z_max * (v + 1)) + x_min] * this.height;
-        let h2 = this.heightmap[(z_min * (v + 1)) + x_max] * this.height;
-        let h3 = this.heightmap[(z_min * (v + 1)) + x_min] * this.height;
-
-        return Math.min(h0, h1, h2, h3);
+        // Bilinear interpolation:
+        return (h1 * (1.0 - fX) + h2 * fX) * (1.0 - fZ) + (h3 * (1.0 - fX) + h4 * fX) * (fZ);
     }
-
 }
